@@ -1,22 +1,24 @@
 export type PresetId = 'subtle' | 'natural' | 'lived-in' | 'spektor-stage' | 'custom'
 
 export interface HumanizeParams {
-  /** Micro-timing jitter 0–1 */
+  /** Micro-timing jitter 0–1 — sample-delay groove, not pitch warble */
   jitter: number
-  /** Subtle pitch drift / vibrato 0–1 */
-  pitchDrift: number
-  /** Dynamics variation / breathing gain 0–1 */
+  /** Gentle delay-line flutter (chorus-ish) 0–1 — NOT rate-resample pitch */
+  flutter: number
+  /** Dynamics ride / soft compression breathe 0–1 */
   dynamics: number
-  /** Breath / room noise bed 0–1 */
+  /** Very quiet high-passed air / room hiss 0–1 */
   noise: number
   /** Soft saturation / warmth 0–1 */
   warmth: number
-  /** Reverb / stereo space 0–1 */
+  /** Short room bloom 0–1 — kept dry by design */
   space: number
   /** Transient softening 0–1 */
   transientSoft: number
-  /** Stereo width 0–1 */
+  /** Stereo mid-side width 0–1 — mono-safe */
   width: number
+  /** Dry/wet mix master 0–1 — dial intensity without changing character */
+  mix: number
 }
 
 export interface DetectionFeature {
@@ -32,6 +34,8 @@ export interface DetectionResult {
   score: number
   label: 'Likely natural' | 'Mixed signals' | 'Likely synthetic' | 'Strongly synthetic'
   features: DetectionFeature[]
+  /** Plain-English why this track scored high/low from measured features */
+  rationale: string
   durationSec: number
   sampleRate: number
   channels: number

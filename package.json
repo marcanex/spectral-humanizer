@@ -1,13 +1,14 @@
 {
   "name": "spectral-humanizer",
   "private": true,
-  "version": "2.0.0",
+  "version": "2.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "deploy": "npm run build && gh-pages -d dist"
+    "deploy": "npm run build && gh-pages -d dist",
+    "smoke:detect": "node scripts/smoke-detect.mjs"
   },
   "dependencies": {
     "react": "^19.2.8",

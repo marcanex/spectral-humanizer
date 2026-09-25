@@ -389,7 +389,12 @@ export default function App() {
             <div className="grid lg:grid-cols-2 gap-6">
               <section className="panel p-5 space-y-4">
                 <div className="flex items-center justify-between gap-2">
-                  <h3 className="font-display text-lg text-violet-50">Detection</h3>
+                  <div>
+                    <h3 className="font-display text-lg text-violet-50">Detection</h3>
+                    <p className="text-[10px] text-violet-300/55 mt-0.5">
+                      Heuristic feature analysis · not a neural detector
+                    </p>
+                  </div>
                   <button
                     type="button"
                     className="btn btn-ghost !text-xs"
@@ -435,9 +440,10 @@ export default function App() {
                   </button>
                 </div>
                 <p className="text-[11px] text-violet-300/50 leading-relaxed">
-                  Creative tooling for artists polishing AI-assisted demos (Suno/Udio-style stems &amp;
-                  full mixes). Does <strong className="text-violet-200">not</strong> claim
-                  “undetectable” audio or guarantee beating commercial detectors. Trust your ears.
+                  Creative polish for AI-assisted demos (Suno/Udio-style). Defaults are conservative —
+                  use <strong className="text-violet-200">Dry/Wet</strong> to dial intensity. Does{' '}
+                  <strong className="text-violet-200">not</strong> claim “undetectable” audio. A/B
+                  Original vs Humanized; export matches what you hear. Trust your ears.
                 </p>
               </section>
             </div>
@@ -588,14 +594,16 @@ export default function App() {
         <div className="space-y-3 text-sm">
           <p>
             <strong className="text-violet-100">Spectral Humanizer</strong> is a creative audio
-            toolkit for artists working with AI-assisted music. It estimates patterns that often
-            correlate with stiff synthetic renders, then applies client-side processing to add groove,
-            dynamics, warmth, and space.
+            toolkit for artists working with AI-assisted music. Detection measures real signal
+            features (dynamics, envelope stability, rests, spectral motion, pitch lock, stereo
+            correlation) and explains the score in plain English — it is{' '}
+            <em>not</em> a neural network or forensic detector.
           </p>
           <p>
-            Detection is <em>heuristic and educational</em> — not a forensic or commercial detector.
-            Humanize effects will not make audio “undetectable” and are not designed to defeat
-            platform safety systems.
+            Humanize uses conservative offline Web Audio processing: micro-timing delays, gentle
+            dynamics ride, optional flutter, warmth, quiet air, short room, and mid-side width —
+            with a Dry/Wet mix so you can keep the mix clean. It will not make audio
+            “undetectable” and is not designed to defeat platform safety systems.
           </p>
           <p>
             All processing stays in your browser via the Web Audio API / OfflineAudioContext. No

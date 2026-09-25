@@ -31,24 +31,35 @@ export function ScoreGauge({ result }: { result: DetectionResult | null }) {
             strokeLinecap="round"
             strokeDasharray={c}
             strokeDashoffset={result ? offset : c}
-            style={{ filter: `drop-shadow(0 0 8px ${color})`, transition: 'stroke-dashoffset 0.6s ease' }}
+            style={{
+              filter: `drop-shadow(0 0 8px ${color})`,
+              transition: 'stroke-dashoffset 0.6s ease',
+            }}
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <div className="text-3xl font-bold tabular-nums" style={{ color }}>
             {result ? score : '—'}
           </div>
-          <div className="text-[10px] uppercase tracking-widest text-violet-300/70">AI likelihood</div>
+          <div className="text-[10px] uppercase tracking-widest text-violet-300/70">
+            Heuristic score
+          </div>
         </div>
       </div>
       <div className="text-center">
         <div className="font-display text-base text-violet-100">
           {result?.label ?? 'Awaiting analysis'}
         </div>
-        <p className="text-xs text-violet-300/60 mt-1 max-w-[16rem]">
-          Heuristic score for educational use — not a forensic detector.
+        <p className="text-xs text-violet-300/60 mt-1 max-w-[18rem]">
+          Browser-side feature heuristics — educational, not a magic AI model or forensic proof.
         </p>
       </div>
+      {result?.rationale && (
+        <p className="text-[11px] text-violet-200/70 leading-relaxed max-w-md text-left rounded-lg border border-violet-500/15 bg-black/25 px-3 py-2">
+          <span className="font-semibold text-orange-300/85">Why this score: </span>
+          {result.rationale}
+        </p>
+      )}
     </div>
   )
 }

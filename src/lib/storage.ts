@@ -14,6 +14,22 @@ export const DEFAULT_SETTINGS: AppSettings = {
   accent: 'ember',
 }
 
+/** Migrate v1 params (pitchDrift, no mix) → v2 (flutter, mix). */
+export function normalizeParams(raw: Partial<HumanizeParams> & { pitchDrift?: number }): HumanizeParams {
+  const base = PRESET_PARAMS.natural
+  return {
+    jitter: raw.jitter ?? base.jitter,
+    flutter: raw.flutter ?? (typeof raw.pitchDrift === 'number' ? raw.pitchDrift * 0.5 : base.flutter),
+    dynamics: raw.dynamics ?? base.dynamics,
+    noise: raw.noise ?? base.noise,
+    warmth: raw.warmth ?? base.warmth,
+    space: raw.space ?? base.space,
+    transientSoft: raw.transientSoft ?? base.transientSoft,
+    width: raw.width ?? base.width,
+    mix: raw.mix ?? 0.65,
+  }
+}
+
 export function loadSettings(): AppSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY)
@@ -33,14 +49,17 @@ export function loadHistory(): AudioSession[] {
     const raw = localStorage.getItem(HISTORY_KEY)
     if (!raw) return []
     const parsed = JSON.parse(raw) as AudioSession[]
-    return Array.isArray(parsed) ? parsed : []
+    if (!Array.isArray(parsed)) return []
+    return parsed.map((s) => ({
+      ...s,
+      params: normalizeParams(s.params ?? {}),
+    }))
   } catch {
     return []
   }
 }
 
 export function saveHistory(sessions: AudioSession[]): void {
-  // Keep last 40 metadata-only entries
   const trimmed = sessions.slice(0, 40)
   localStorage.setItem(HISTORY_KEY, JSON.stringify(trimmed))
 }
