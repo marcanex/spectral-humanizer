@@ -1,5 +1,5 @@
 import type { HumanizeParams } from '../types'
-import { clamp, dbToGain, hashString, mulberry32 } from './audioUtils'
+import { clamp, hashString, mulberry32 } from './audioUtils'
 
 /** Hermite interpolation — cleaner than linear for delay reads */
 function hermite(y0: number, y1: number, y2: number, y3: number, t: number): number {
@@ -12,168 +12,130 @@ function hermite(y0: number, y1: number, y2: number, y3: number, t: number): num
 
 function readSample(data: Float32Array, pos: number): number {
   const i1 = Math.floor(pos)
-  const t = pos - i1
+  const frac = pos - i1
   if (i1 < 1 || i1 + 2 >= data.length) {
     if (i1 < 0 || i1 >= data.length) return 0
     const a = data[i1]!
     const b = data[Math.min(i1 + 1, data.length - 1)]!
-    return a + (b - a) * t
+    return a + (b - a) * frac
   }
-  return hermite(data[i1 - 1]!, data[i1]!, data[i1 + 1]!, data[i1 + 2]!, t)
+  return hermite(data[i1 - 1]!, data[i1]!, data[i1 + 1]!, data[i1 + 2]!, frac)
 }
 
 function softClip(x: number, drive: number): number {
-  // Conservative: drive 0→1 maps to mild tanh, makeup-normalized
-  const d = 1 + drive * 1.8
-  return Math.tanh(x * d) / Math.tanh(d)
+  // Barely-above-unity: drive 0→1 → very mild tanh, level-matched at small x
+  const d = 1 + drive * 0.45
+  // Divide by d so small-signal gain ≈ tanh'(0)=1 remains ~1 (not boosted)
+  return Math.tanh(x * d) / d
 }
 
-function generateImpulse(
-  sampleRate: number,
-  seconds: number,
-  decay: number,
-  dark: number,
-  rng: () => number,
-): AudioBuffer {
-  const len = Math.max(1, Math.floor(sampleRate * seconds))
-  const ctx = new OfflineAudioContext(2, len, sampleRate)
-  const buf = ctx.createBuffer(2, len, sampleRate)
-  for (let c = 0; c < 2; c++) {
-    const data = buf.getChannelData(c)
-    let lp = 0
-    for (let i = 0; i < len; i++) {
-      const t = i / sampleRate
-      const env = Math.exp(-t * decay)
-      // Sparse early reflections
-      const click =
-        i < 48 ? (1 - i / 48) * (c === 0 ? 0.9 : 0.65) * (1 - dark * 0.3) : 0
-      let n = (rng() * 2 - 1) * 0.28
-      // Darken tail for Spektor-ish warmth
-      lp = lp + (n - lp) * (0.35 - dark * 0.2)
-      n = n * (1 - dark) + lp * dark
-      data[i] = (click + n) * env
-    }
+function ensureStereo(source: AudioBuffer): { L: Float32Array; R: Float32Array; sr: number; len: number } {
+  const sr = source.sampleRate
+  const len = source.length
+  const L = new Float32Array(len)
+  const R = new Float32Array(len)
+  const c0 = source.getChannelData(0)
+  L.set(c0)
+  if (source.numberOfChannels > 1) {
+    R.set(source.getChannelData(1))
+  } else {
+    R.set(c0)
   }
-  return buf
+  return { L, R, sr, len }
 }
 
-function makeAirNoise(length: number, rng: () => number): Float32Array {
-  // Pink-ish then we'll high-pass in the graph; keep amplitude modest
-  const out = new Float32Array(length)
-  let b0 = 0,
-    b1 = 0,
-    b2 = 0,
-    b3 = 0,
-    b4 = 0,
-    b5 = 0,
-    b6 = 0
-  for (let i = 0; i < length; i++) {
-    const white = rng() * 2 - 1
-    b0 = 0.99886 * b0 + white * 0.0555179
-    b1 = 0.99332 * b1 + white * 0.0750759
-    b2 = 0.969 * b2 + white * 0.153852
-    b3 = 0.8665 * b3 + white * 0.3104856
-    b4 = 0.55 * b4 + white * 0.5329522
-    b5 = -0.7616 * b5 - white * 0.016898
-    out[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.09
-    b6 = white * 0.115926
-  }
+function makeOutBuffer(L: Float32Array, R: Float32Array, sr: number): AudioBuffer {
+  const ctx = new OfflineAudioContext(2, L.length, sr)
+  const out = ctx.createBuffer(2, L.length, sr)
+  out.getChannelData(0).set(L)
+  out.getChannelData(1).set(R)
   return out
 }
 
 /**
- * Micro-timing only: slowly changing read offsets (ms scale).
- * No variable playback rate — avoids robotic warble.
+ * Micro-timing ONLY via a slowly modulated sample delay (≤ few ms peak).
+ * Shared L/R modulation (tiny optional decorrelation) — no grain clouds,
+ * no rate-resample pitch, no independent L/R chaos that phases.
  */
 function applyMicroTiming(
-  src: AudioBuffer,
+  L: Float32Array,
+  R: Float32Array,
+  sr: number,
   jitter: number,
   rng: () => number,
-): AudioBuffer {
-  if (jitter < 0.01) return src
+): { L: Float32Array; R: Float32Array } {
+  if (jitter < 0.01) return { L, R }
 
-  const sr = src.sampleRate
-  const len = src.length
-  const chIn = src.numberOfChannels
-  const chOut = Math.max(2, chIn)
-  const ctx = new OfflineAudioContext(chOut, len, sr)
-  const out = ctx.createBuffer(chOut, len, sr)
+  const len = L.length
+  const outL = new Float32Array(len)
+  const outR = new Float32Array(len)
 
-  const srcCh: Float32Array[] = []
-  for (let c = 0; c < chIn; c++) srcCh.push(src.getChannelData(c))
-  if (chIn === 1) srcCh.push(src.getChannelData(0))
-
-  // Max offset ~0.4–5.5 ms — audible groove, not smear
-  const maxMs = 0.4 + jitter * 5.1
+  // Peak delay ≤ ~2.8 ms at full jitter — groove, not smear
+  const maxMs = 0.25 + jitter * 2.55
   const maxSamp = (maxMs / 1000) * sr
-  const grainSec = 0.055 + (1 - jitter) * 0.04 // shorter grains when more jitter
-  const grain = Math.max(128, Math.floor(sr * grainSec))
-  const grainCount = Math.ceil(len / grain) + 3
 
-  // Independent L/R offsets for a touch of natural decorrelation
-  const offsetsL = new Float32Array(grainCount)
-  const offsetsR = new Float32Array(grainCount)
-  for (let g = 0; g < grainCount; g++) {
-    offsetsL[g] = (rng() * 2 - 1) * maxSamp
-    offsetsR[g] = (rng() * 2 - 1) * maxSamp * 0.85
-  }
+  // Two very slow incommensurate sines → organic wander, continuous & smooth
+  const f1 = 0.11 + rng() * 0.09
+  const f2 = 0.037 + rng() * 0.03
+  const p1 = rng() * Math.PI * 2
+  const p2 = rng() * Math.PI * 2
+  // Tiny L/R decorrelation (≤ 8% of depth) — mono-safe
+  const deco = (rng() * 2 - 1) * 0.08
 
-  for (let c = 0; c < chOut; c++) {
-    const input = srcCh[Math.min(c, srcCh.length - 1)]!
-    const dest = out.getChannelData(c)
-    const table = c === 0 ? offsetsL : offsetsR
-    for (let i = 0; i < len; i++) {
-      const g = Math.floor(i / grain)
-      const local = (i - g * grain) / grain
-      // Smoothstep crossfade between grain offsets
-      const s = local * local * (3 - 2 * local)
-      const j0 = table[g] ?? 0
-      const j1 = table[g + 1] ?? j0
-      const offset = j0 * (1 - s) + j1 * s
-      dest[i] = readSample(input, i + offset)
-    }
+  const twoPiOverSr = (2 * Math.PI) / sr
+  for (let i = 0; i < len; i++) {
+    const t = i * twoPiOverSr
+    const mod = Math.sin(t * f1 + p1) * 0.65 + Math.sin(t * f2 + p2) * 0.35
+    const offset = mod * maxSamp
+    outL[i] = readSample(L, i + offset)
+    outR[i] = readSample(R, i + offset * (1 + deco))
   }
-  return out
+  return { L: outL, R: outR }
 }
 
 /**
- * Envelope-aware dynamics ride + transient soften + warmth.
- * Preserves headroom; no brickwall crush.
+ * Very light envelope ride + optional transient ease + mild warmth.
+ * No brickwall, no loudness war.
  */
-function dynamicsTone(
-  src: AudioBuffer,
+function applyDynamicsTone(
+  L: Float32Array,
+  R: Float32Array,
+  sr: number,
   params: HumanizeParams,
   rng: () => number,
-): AudioBuffer {
-  const sr = src.sampleRate
-  const len = src.length
-  const ch = src.numberOfChannels
-  const ctx = new OfflineAudioContext(ch, len, sr)
-  const out = ctx.createBuffer(ch, len, sr)
+): { L: Float32Array; R: Float32Array } {
+  const dyn = params.dynamics
+  const soft = params.transientSoft
+  const drive = params.warmth
+  if (dyn < 0.01 && soft < 0.01 && drive < 0.01) return { L, R }
 
-  const win = Math.max(64, Math.floor(sr * 0.008))
-  const ref = src.getChannelData(0)
+  const len = L.length
+  const outL = new Float32Array(len)
+  const outR = new Float32Array(len)
+
+  const win = Math.max(64, Math.floor(sr * 0.01))
   const nWin = Math.ceil(len / win)
   const fastEnv = new Float32Array(nWin)
   for (let g = 0; g < nWin; g++) {
     const start = g * win
     const end = Math.min(len, start + win)
     let sum = 0
-    for (let i = start; i < end; i++) sum += ref[i]! * ref[i]!
+    for (let i = start; i < end; i++) {
+      const m = (L[i]! + R[i]!) * 0.5
+      sum += m * m
+    }
     fastEnv[g] = Math.sqrt(sum / Math.max(1, end - start))
   }
 
-  // Slow envelope
   const slowEnv = new Float32Array(nWin)
   let s = fastEnv[0] ?? 0
   for (let i = 0; i < nWin; i++) {
     const target = fastEnv[i]!
-    const coeff = target > s ? 0.22 : 0.06
+    const coeff = target > s ? 0.18 : 0.05
     s = s + (target - s) * coeff
     slowEnv[i] = s
   }
 
-  // Target RMS for gentle upward ride (restore life in flat beds)
   let meanRms = 0
   let active = 0
   for (let i = 0; i < nWin; i++) {
@@ -184,266 +146,246 @@ function dynamicsTone(
   }
   meanRms = active ? meanRms / active : 0.1
 
-  const dyn = params.dynamics
-  const soft = params.transientSoft
-  const drive = params.warmth
-  // Spektor-ish dark shelf when warmth is high
-  const darkAmt = drive * 0.55
-
-  // Slow breathe LFO — small
-  const breathHz = 0.07 + rng() * 0.08
+  // Tiny breathe — ±0.35 dB-ish at full dyn, not tremolo
+  const breathHz = 0.05 + rng() * 0.05
   let breathPhase = rng() * Math.PI * 2
-  const breathDepth = dyn * 0.07 // ±0.6 dB-ish at full — musical, not tremolo
+  const breathDepth = dyn * 0.04
 
-  // One-pole lowpass state per channel for warmth darkening
-  const lpState = new Float32Array(ch)
+  // One-pole dark shelf state (Spektor-ish when warmth high)
+  let lpL = 0
+  let lpR = 0
+  const darkAmt = drive * 0.4
 
-  for (let c = 0; c < ch; c++) {
-    const input = src.getChannelData(c)
-    const dest = out.getChannelData(c)
-    breathPhase = rng() * Math.PI * 2
-    let lp = 0
-    for (let i = 0; i < len; i++) {
-      const g = Math.min(nWin - 1, Math.floor(i / win))
-      const fast = fastEnv[g]!
-      const slow = slowEnv[g]!
-      let x = input[i]!
+  for (let i = 0; i < len; i++) {
+    const g = Math.min(nWin - 1, Math.floor(i / win))
+    const fast = fastEnv[g]!
+    const slow = slowEnv[g]!
+    let xL = L[i]!
+    let xR = R[i]!
 
-      // Transient soften: only when attack clearly exceeds sustain
-      if (soft > 0.02 && slow > 1e-5) {
-        const ratio = fast / slow
-        if (ratio > 1.55) {
-          const reduce = clamp((ratio - 1.55) / 2.8, 0, 1) * soft * 0.28
-          x *= 1 - reduce
-        }
+    if (soft > 0.02 && slow > 1e-5) {
+      const ratio = fast / slow
+      if (ratio > 1.7) {
+        const reduce = clamp((ratio - 1.7) / 3.0, 0, 1) * soft * 0.18
+        const keep = 1 - reduce
+        xL *= keep
+        xR *= keep
       }
-
-      // Soft dynamics ride: pull quiet parts toward mean, ease loud peaks
-      if (dyn > 0.02 && slow > 1e-5 && meanRms > 1e-5) {
-        const rel = slow / meanRms
-        let ride = 1
-        if (rel < 0.85) {
-          // upward: +0..~1.5 dB
-          ride = 1 + (0.85 - rel) * dyn * 0.35
-        } else if (rel > 1.25) {
-          // gentle downward
-          ride = 1 - Math.min(0.12, (rel - 1.25) * dyn * 0.08)
-        }
-        x *= ride
-      }
-
-      breathPhase += (2 * Math.PI * breathHz) / sr
-      x *= 1 + Math.sin(breathPhase) * breathDepth
-
-      if (drive > 0.02) {
-        x = softClip(x, drive * 0.85)
-        // Mild HF roll for tape / Spektor darkness
-        if (darkAmt > 0.05) {
-          const a = 0.12 + darkAmt * 0.35
-          lp = lp + (x - lp) * (1 - a)
-          x = x * (1 - darkAmt * 0.35) + lp * (darkAmt * 0.35)
-        }
-      }
-
-      dest[i] = x
     }
-    lpState[c] = lp
+
+    if (dyn > 0.02 && slow > 1e-5 && meanRms > 1e-5) {
+      const rel = slow / meanRms
+      let ride = 1
+      if (rel < 0.8) {
+        ride = 1 + (0.8 - rel) * dyn * 0.22 // ≤ ~+1.5 dB upward
+      } else if (rel > 1.35) {
+        ride = 1 - Math.min(0.08, (rel - 1.35) * dyn * 0.05)
+      }
+      xL *= ride
+      xR *= ride
+    }
+
+    breathPhase += (2 * Math.PI * breathHz) / sr
+    const breath = 1 + Math.sin(breathPhase) * breathDepth
+    xL *= breath
+    xR *= breath
+
+    if (drive > 0.02) {
+      xL = softClip(xL, drive * 0.55)
+      xR = softClip(xR, drive * 0.55)
+      if (darkAmt > 0.05) {
+        const a = 0.18 + darkAmt * 0.28
+        lpL = lpL + (xL - lpL) * (1 - a)
+        lpR = lpR + (xR - lpR) * (1 - a)
+        const blend = darkAmt * 0.28
+        xL = xL * (1 - blend) + lpL * blend
+        xR = xR * (1 - blend) + lpR * blend
+      }
+    }
+
+    outL[i] = xL
+    outR[i] = xR
   }
-  return out
+  return { L: outL, R: outR }
 }
 
 /**
- * Full pipeline: micro-timing → dynamics/tone → offline (flutter, air, width, space) → dry/wet mix.
+ * Proper mid-side width. Mono-safe: side boost capped, no Haas.
+ * Default off / tiny — widen only when asked.
+ */
+function applyWidth(
+  L: Float32Array,
+  R: Float32Array,
+  width: number,
+): { L: Float32Array; R: Float32Array } {
+  if (width < 0.02) return { L, R }
+  const len = L.length
+  const outL = new Float32Array(len)
+  const outR = new Float32Array(len)
+  // side multiplier 1 → ~1.35 at full; mid gently pulled so loudness stays similar
+  const sideMul = 1 + width * 0.35
+  const midMul = 1 - width * 0.08
+  for (let i = 0; i < len; i++) {
+    const mid = ((L[i]! + R[i]!) * 0.5) * midMul
+    const side = ((L[i]! - R[i]!) * 0.5) * sideMul
+    outL[i] = mid + side
+    outR[i] = mid - side
+  }
+  return { L: outL, R: outR }
+}
+
+/**
+ * Optional flutter: very short modulated delay blend (chorus-ish).
+ * OFF unless flutter param is set; keep wet tiny to avoid phase wash.
+ */
+function applyFlutter(
+  L: Float32Array,
+  R: Float32Array,
+  sr: number,
+  flutter: number,
+  rng: () => number,
+): { L: Float32Array; R: Float32Array } {
+  if (flutter < 0.02) return { L, R }
+  const len = L.length
+  const outL = new Float32Array(len)
+  const outR = new Float32Array(len)
+
+  const baseMs = 6.5
+  const depthMs = flutter * 1.2 // ±1.2 ms at full — subtle shimmer
+  const baseSamp = (baseMs / 1000) * sr
+  const depthSamp = (depthMs / 1000) * sr
+  const wet = flutter * 0.1 // max 10% blend
+  const dry = 1 - wet * 0.5
+  const f = 0.28 + rng() * 0.25
+  const phase = rng() * Math.PI * 2
+  const twoPiOverSr = (2 * Math.PI) / sr
+
+  for (let i = 0; i < len; i++) {
+    const mod = Math.sin(i * twoPiOverSr * f + phase)
+    const d = baseSamp + mod * depthSamp
+    const delayedL = readSample(L, i - d)
+    const delayedR = readSample(R, i - d)
+    outL[i] = L[i]! * dry + delayedL * wet
+    outR[i] = R[i]! * dry + delayedR * wet
+  }
+  return { L: outL, R: outR }
+}
+
+/**
+ * Optional tiny early reflection (not a convolver wash).
+ * Single delayed copy, lowpassed, ≤5% wet. Omitted unless space asked.
+ */
+function applyTinyRoom(
+  L: Float32Array,
+  R: Float32Array,
+  sr: number,
+  space: number,
+): { L: Float32Array; R: Float32Array } {
+  if (space < 0.05) return { L, R }
+  const len = L.length
+  const outL = new Float32Array(len)
+  const outR = new Float32Array(len)
+
+  const delayMs = 14 + space * 8 // 14–22 ms early reflection
+  const delaySamp = Math.floor((delayMs / 1000) * sr)
+  const wet = Math.min(0.05, space * 0.08) // hard cap 5%
+  const dry = 1 - wet * 0.3
+
+  // One-pole LP on reflection (~3 kHz-ish)
+  const a = Math.exp((-2 * Math.PI * 2800) / sr)
+  let lpL = 0
+  let lpR = 0
+  // Tiny L/R offset (±0.4 ms) for spaciousness without Haas trash
+  const offsetR = Math.floor(0.0004 * sr)
+
+  for (let i = 0; i < len; i++) {
+    const iL = i - delaySamp
+    const iR = i - delaySamp - offsetR
+    const rawL = iL >= 0 ? L[iL]! : 0
+    const rawR = iR >= 0 ? R[iR]! : 0
+    lpL = a * lpL + (1 - a) * rawL
+    lpR = a * lpR + (1 - a) * rawR
+    outL[i] = L[i]! * dry + lpL * wet
+    outR[i] = R[i]! * dry + lpR * wet
+  }
+  return { L: outL, R: outR }
+}
+
+
+/** Soft peak protect — only if we actually clip; no loudness crush */
+function softPeakProtect(L: Float32Array, R: Float32Array): void {
+  let peak = 0
+  for (let i = 0; i < L.length; i++) {
+    const a = Math.abs(L[i]!)
+    const b = Math.abs(R[i]!)
+    if (a > peak) peak = a
+    if (b > peak) peak = b
+  }
+  if (peak > 0.99) {
+    const g = 0.99 / peak
+    for (let i = 0; i < L.length; i++) {
+      L[i]! *= g
+      R[i]! *= g
+    }
+  }
+}
+
+/**
+ * Minimal clean humanize:
+ * micro-timing → light dynamics/warmth → optional width → optional flutter →
+ * optional tiny room.
+ *
+ * Mix scales COLOR effect depths (dynamics/warmth/width/flutter/space).
+ * Micro-timing always replaces the buffer when engaged (never blended against
+ * the undelayed original — that combs / hollows). mix=0 → exact original.
+ *
+ * Intentionally omitted:
+ *   Haas, pink/air noise, grain clouds, rate-resample pitch, convolver reverb,
+ *   brickwall/soft limiter crush, classic delayed dry/wet blend.
+ * Noise param is ignored (kept in types for UI compatibility).
  */
 export async function humanizeAudio(
   source: AudioBuffer,
   params: HumanizeParams,
   seedKey = 'spectral',
 ): Promise<AudioBuffer> {
-  const mix = clamp(params.mix ?? 1, 0, 1)
-  // Early out if fully dry
+  const mix = clamp(params.mix ?? 0, 0, 1)
+  const { L: dryL, R: dryR, sr, len } = ensureStereo(source)
+
+  // True bypass — bit-identical stereo copy of original
   if (mix < 0.001) {
-    const ctx = new OfflineAudioContext(
-      Math.max(2, source.numberOfChannels),
-      source.length,
-      source.sampleRate,
-    )
-    const out = ctx.createBuffer(
-      Math.max(2, source.numberOfChannels),
-      source.length,
-      source.sampleRate,
-    )
-    for (let c = 0; c < out.numberOfChannels; c++) {
-      const src = source.getChannelData(Math.min(c, source.numberOfChannels - 1))
-      out.copyToChannel(src, c)
-    }
-    return out
+    return makeOutBuffer(dryL, dryR, sr)
   }
 
-  const rng = mulberry32(hashString(seedKey + JSON.stringify(params) + source.length))
-
-  // 1) Micro-timing (no pitch warble)
-  let buf = applyMicroTiming(source, params.jitter, rng)
-
-  // 2) Dynamics / warmth / transient
-  buf = dynamicsTone(buf, params, rng)
-
-  // 3) Offline graph: flutter delay, width, air, space
-  const sr = buf.sampleRate
-  const len = buf.length
-  const offline = new OfflineAudioContext(2, len, sr)
-
-  const wetSrc = offline.createBufferSource()
-  wetSrc.buffer = buf
-
-  // --- Stereo width (mid-side, mono-safe) ---
-  const splitter = offline.createChannelSplitter(2)
-  const merger = offline.createChannelMerger(2)
-  const width = clamp(params.width, 0, 1)
-
-  // Encode approximate M/S with gains
-  const midGain = offline.createGain()
-  const sideGain = offline.createGain()
-  midGain.gain.value = 1 - width * 0.18
-  sideGain.gain.value = 0.55 + width * 0.55
-
-  // Tiny Haas on R only — keep ≤ ~2.2 ms to avoid phase trash
-  const haas = offline.createDelay(0.01)
-  haas.delayTime.value = 0.0002 + width * 0.002
-
-  wetSrc.connect(splitter)
-  // L → mid path to both; R → side with Haas on R
-  const leftThru = offline.createGain()
-  leftThru.gain.value = 1
-  splitter.connect(leftThru, 0)
-  leftThru.connect(midGain)
-  midGain.connect(merger, 0, 0)
-  midGain.connect(merger, 0, 1)
-
-  splitter.connect(sideGain, 1)
-  sideGain.connect(merger, 0, 0)
-  sideGain.connect(haas)
-  haas.connect(merger, 0, 1)
-
-  // --- Flutter: short modulated delay blend (chorus-ish, not pitch resample) ---
-  const flutterAmt = clamp(params.flutter, 0, 1)
-  const flutterDelay = offline.createDelay(0.03)
-  const baseDelay = 0.007
-  const flutterDepth = flutterAmt * 0.0035 // ±3.5 ms
-  const flutterLfo = offline.createOscillator()
-  flutterLfo.type = 'sine'
-  flutterLfo.frequency.value = 0.35 + rng() * 0.45
-  const flutterLfoGain = offline.createGain()
-  flutterLfoGain.gain.value = flutterDepth
-  flutterDelay.delayTime.value = baseDelay
-  flutterLfo.connect(flutterLfoGain)
-  flutterLfoGain.connect(flutterDelay.delayTime)
-  const flutterGain = offline.createGain()
-  flutterGain.gain.value = flutterAmt * 0.22
-  const flutterHp = offline.createBiquadFilter()
-  flutterHp.type = 'highpass'
-  flutterHp.frequency.value = 180
-
-  // Dry path after width
-  const bodyGain = offline.createGain()
-  bodyGain.gain.value = 1 - flutterAmt * 0.08
-
-  merger.connect(bodyGain)
-  merger.connect(flutterHp)
-  flutterHp.connect(flutterDelay)
-  flutterDelay.connect(flutterGain)
-
-  const preFx = offline.createGain()
-  preFx.gain.value = 1
-  bodyGain.connect(preFx)
-  flutterGain.connect(preFx)
-
-  // --- Air / noise (very quiet, high-passed) ---
-  const noiseBuf = offline.createBuffer(2, len, sr)
-  noiseBuf.getChannelData(0).set(makeAirNoise(len, rng))
-  noiseBuf.getChannelData(1).set(makeAirNoise(len, rng))
-  const noiseSrc = offline.createBufferSource()
-  noiseSrc.buffer = noiseBuf
-  const noiseHp = offline.createBiquadFilter()
-  noiseHp.type = 'highpass'
-  noiseHp.frequency.value = 4200
-  noiseHp.Q.value = 0.7
-  const noiseGain = offline.createGain()
-  // Max ~ -50 dB at full — audible as air when soloed, not a bed of hiss
-  noiseGain.gain.value =
-    params.noise > 0.01 ? dbToGain(-58 + params.noise * 10) : 0
-
-  // --- Space / short room ---
-  const space = clamp(params.space, 0, 1)
-  const convolver = offline.createConvolver()
-  const spaceSec = 0.18 + space * 0.55
-  const decay = 3.5 + space * 3.5
-  convolver.buffer = generateImpulse(sr, spaceSec, decay, params.warmth * 0.7, rng)
-  const reverbGain = offline.createGain()
-  reverbGain.gain.value = space * 0.16 // conservative wet
-  const dryBody = offline.createGain()
-  dryBody.gain.value = 1 - space * 0.08
-
-  const wetBus = offline.createGain()
-  wetBus.gain.value = 1
-
-  preFx.connect(dryBody)
-  preFx.connect(convolver)
-  convolver.connect(reverbGain)
-  dryBody.connect(wetBus)
-  reverbGain.connect(wetBus)
-
-  noiseSrc.connect(noiseHp)
-  noiseHp.connect(noiseGain)
-  noiseGain.connect(wetBus)
-
-  // Soft limiter — gentle, not brickwall
-  const limiter = offline.createDynamicsCompressor()
-  limiter.threshold.value = -2.5
-  limiter.knee.value = 10
-  limiter.ratio.value = 3.5
-  limiter.attack.value = 0.005
-  limiter.release.value = 0.18
-
-  wetBus.connect(limiter)
-  limiter.connect(offline.destination)
-
-  wetSrc.start(0)
-  noiseSrc.start(0)
-  if (flutterAmt > 0.01) flutterLfo.start(0)
-
-  const wetRendered = await offline.startRendering()
-
-  // 4) Dry/wet mix against original (channel-matched to stereo)
-  const outCtx = new OfflineAudioContext(2, len, sr)
-  const mixed = outCtx.createBuffer(2, len, sr)
-  for (let c = 0; c < 2; c++) {
-    const dryCh = source.getChannelData(Math.min(c, source.numberOfChannels - 1))
-    const wetCh = wetRendered.getChannelData(c)
-    const dest = mixed.getChannelData(c)
-    for (let i = 0; i < len; i++) {
-      const d = dryCh[i] ?? 0
-      const w = wetCh[i] ?? 0
-      dest[i] = d * (1 - mix) + w * mix
-    }
+  // Micro-timing replaces the signal (time-aligned with itself) — never
+  // dry/wet-blended against the undelayed original (that combs / hollows).
+  // Color FX depths are intensity-scaled by mix so low mix stays almost dry.
+  const p: HumanizeParams = {
+    jitter: params.jitter, // full timing character whenever engaged
+    flutter: params.flutter * mix,
+    dynamics: params.dynamics * mix,
+    noise: 0,
+    warmth: params.warmth * mix,
+    space: params.space * mix,
+    transientSoft: params.transientSoft * mix,
+    width: params.width * mix,
+    mix: 1,
   }
 
-  // Peak normalize only if we clip — preserve dynamics otherwise
-  let peak = 0
-  for (let c = 0; c < 2; c++) {
-    const d = mixed.getChannelData(c)
-    for (let i = 0; i < len; i++) {
-      const a = Math.abs(d[i]!)
-      if (a > peak) peak = a
-    }
-  }
-  if (peak > 0.99) {
-    const g = 0.99 / peak
-    for (let c = 0; c < 2; c++) {
-      const d = mixed.getChannelData(c)
-      for (let i = 0; i < len; i++) d[i]! *= g
-    }
-  }
+  const rng = mulberry32(hashString(seedKey + JSON.stringify(params) + len))
 
-  return mixed
+  let L = dryL
+  let R = dryR
+
+  ;({ L, R } = applyMicroTiming(L, R, sr, p.jitter, rng))
+  ;({ L, R } = applyDynamicsTone(L, R, sr, p, rng))
+  ;({ L, R } = applyWidth(L, R, p.width))
+  ;({ L, R } = applyFlutter(L, R, sr, p.flutter, rng))
+  ;({ L, R } = applyTinyRoom(L, R, sr, p.space))
+
+  softPeakProtect(L, R)
+
+  // Yield so UI stays responsive on long files
+  await Promise.resolve()
+  return makeOutBuffer(L, R, sr)
 }

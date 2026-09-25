@@ -26,7 +26,7 @@ export function normalizeParams(raw: Partial<HumanizeParams> & { pitchDrift?: nu
     space: raw.space ?? base.space,
     transientSoft: raw.transientSoft ?? base.transientSoft,
     width: raw.width ?? base.width,
-    mix: raw.mix ?? 0.65,
+    mix: raw.mix ?? 0.25,
   }
 }
 

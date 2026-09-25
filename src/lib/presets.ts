@@ -1,57 +1,58 @@
 import type { HumanizeParams, PresetId } from '../types'
 
 /**
- * Presets are character recipes — not "more of the same soup".
- * Each emphasizes a different audible axis so A/B between presets is obvious.
+ * Presets differ in character but ALL stay listenable / dry-first.
+ * Mix caps: Subtle ~15%, Natural ~25%, Lived-in ~35%, Spektor ~40%.
+ * No noise / Haas / wash reverb in any default.
  */
 export const PRESET_PARAMS: Record<Exclude<PresetId, 'custom'>, HumanizeParams> = {
-  // Barely there: clean polish, mix dialed down
+  // Almost dry — tiny timing, barely any dynamics
   subtle: {
-    jitter: 0.22,
+    jitter: 0.28,
     flutter: 0.0,
-    dynamics: 0.18,
-    noise: 0.04,
-    warmth: 0.08,
-    space: 0.06,
-    transientSoft: 0.08,
-    width: 0.12,
-    mix: 0.45,
+    dynamics: 0.12,
+    noise: 0.0,
+    warmth: 0.05,
+    space: 0.0,
+    transientSoft: 0.05,
+    width: 0.0,
+    mix: 0.15,
   },
-  // Light groove + dynamics ride — the default demo polish
+  // Light groove + soft dynamics ride — default polish
   natural: {
-    jitter: 0.42,
-    flutter: 0.12,
-    dynamics: 0.48,
-    noise: 0.1,
-    warmth: 0.22,
-    space: 0.14,
-    transientSoft: 0.18,
-    width: 0.28,
-    mix: 0.62,
+    jitter: 0.4,
+    flutter: 0.0,
+    dynamics: 0.32,
+    noise: 0.0,
+    warmth: 0.12,
+    space: 0.0,
+    transientSoft: 0.1,
+    width: 0.08,
+    mix: 0.25,
   },
-  // Timing + warmth + air + a touch of room — worn-in tape feel
+  // More timing + mild warmth; optional whisper of early reflection
   'lived-in': {
-    jitter: 0.62,
-    flutter: 0.22,
-    dynamics: 0.4,
-    noise: 0.38,
-    warmth: 0.55,
-    space: 0.28,
-    transientSoft: 0.32,
-    width: 0.35,
-    mix: 0.72,
+    jitter: 0.55,
+    flutter: 0.0,
+    dynamics: 0.28,
+    noise: 0.0,
+    warmth: 0.32,
+    space: 0.18,
+    transientSoft: 0.16,
+    width: 0.12,
+    mix: 0.35,
   },
-  // Darker tilt, wider image, grit + stage bloom — still listenable
+  // Darker shelf + slight width + mild grit; flutter barely on
   'spektor-stage': {
-    jitter: 0.38,
-    flutter: 0.28,
-    dynamics: 0.55,
-    noise: 0.18,
-    warmth: 0.68,
-    space: 0.48,
-    transientSoft: 0.22,
-    width: 0.7,
-    mix: 0.78,
+    jitter: 0.36,
+    flutter: 0.18,
+    dynamics: 0.38,
+    noise: 0.0,
+    warmth: 0.48,
+    space: 0.22,
+    transientSoft: 0.12,
+    width: 0.28,
+    mix: 0.4,
   },
 }
 
@@ -61,19 +62,19 @@ export const PRESET_META: Record<
 > = {
   subtle: {
     label: 'Subtle',
-    blurb: 'Barely there — light micro-timing + soft dynamics. Mix ~45%.',
+    blurb: 'Almost dry — tiny micro-timing. Mix ~15%.',
   },
   natural: {
     label: 'Natural',
-    blurb: 'Groove + gain ride — human feel without dirt. Mix ~62%.',
+    blurb: 'Light timing + soft dynamics ride. Mix ~25%.',
   },
   'lived-in': {
     label: 'Lived-in',
-    blurb: 'More timing, tape warmth, and room air. Mix ~72%.',
+    blurb: 'More timing + mild warmth; whisper of room. Mix ~35%.',
   },
   'spektor-stage': {
     label: 'Spektor Stage',
-    blurb: 'Darker tilt, wider image, grit + stage bloom. Mix ~78%.',
+    blurb: 'Darker tilt, slight width, mild grit. Mix ~40% — still clean.',
   },
 }
 

@@ -440,10 +440,11 @@ export default function App() {
                   </button>
                 </div>
                 <p className="text-[11px] text-violet-300/50 leading-relaxed">
-                  Creative polish for AI-assisted demos (Suno/Udio-style). Defaults are conservative —
-                  use <strong className="text-violet-200">Dry/Wet</strong> to dial intensity. Does{' '}
-                  <strong className="text-violet-200">not</strong> claim “undetectable” audio. A/B
-                  Original vs Humanized; export matches what you hear. Trust your ears.
+                  Creative polish for AI-assisted demos (Suno/Udio-style). Dry-first defaults (mix
+                  ≤40%) — prefer clean over wet “human”. Use{' '}
+                  <strong className="text-violet-200">Bypass (0% mix)</strong> for a true original.
+                  Does <strong className="text-violet-200">not</strong> claim “undetectable” audio.
+                  A/B Original vs Humanized; export matches what you hear.
                 </p>
               </section>
             </div>
@@ -600,10 +601,11 @@ export default function App() {
             <em>not</em> a neural network or forensic detector.
           </p>
           <p>
-            Humanize uses conservative offline Web Audio processing: micro-timing delays, gentle
-            dynamics ride, optional flutter, warmth, quiet air, short room, and mid-side width —
-            with a Dry/Wet mix so you can keep the mix clean. It will not make audio
-            “undetectable” and is not designed to defeat platform safety systems.
+            Humanize uses a minimal dry-first chain: micro-timing sample delays, light dynamics,
+            mild warmth, optional mid-side width / flutter / tiny early reflection — with Dry/Wet
+            mix defaults kept low (≤40%). No Haas, no noise bed, no convolver wash. It will not
+            make audio “undetectable” and is not designed to defeat platform safety systems.
+            Browser DSP will not match a Pro Tools session — always A/B with your ears.
           </p>
           <p>
             All processing stays in your browser via the Web Audio API / OfflineAudioContext. No

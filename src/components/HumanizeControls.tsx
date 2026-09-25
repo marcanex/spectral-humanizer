@@ -5,22 +5,22 @@ const SLIDERS: { key: keyof HumanizeParams; label: string; hint: string }[] = [
   {
     key: 'mix',
     label: 'Dry / Wet mix',
-    hint: 'Master intensity — 0 = original, 100 = full processing',
+    hint: '0% = exact original. Scales color FX depth (timing stays time-aligned — no comb filter)',
   },
   {
     key: 'jitter',
     label: 'Groove / micro-timing',
-    hint: 'Sample-delay wobble (ms) — timing only, no pitch warble',
+    hint: 'Smooth sample-delay wander (≤ ~3 ms) — timing only, no pitch warble',
   },
   {
     key: 'flutter',
     label: 'Flutter / chorus',
-    hint: 'Short modulated delay blend — live shimmer, not detune',
+    hint: 'Short modulated delay blend — OFF by default; use sparingly',
   },
   {
     key: 'dynamics',
     label: 'Dynamics ride',
-    hint: 'Gentle upward gain ride + soft breathe on flat beds',
+    hint: 'Very light upward gain ride + soft breathe on flat beds',
   },
   {
     key: 'transientSoft',
@@ -30,22 +30,22 @@ const SLIDERS: { key: keyof HumanizeParams; label: string; hint: string }[] = [
   {
     key: 'warmth',
     label: 'Warmth / saturation',
-    hint: 'Soft clip + mild HF darkening (tape-ish)',
+    hint: 'Barely-above-unity soft clip + mild HF darkening',
   },
   {
     key: 'noise',
     label: 'Air / noise bed',
-    hint: 'Very quiet high-passed hiss — room air, not mud',
+    hint: 'Disabled in engine (kept for UI) — was a hiss/mud culprit',
   },
   {
     key: 'space',
     label: 'Space / room',
-    hint: 'Short dry room bloom — kept conservative',
+    hint: 'Tiny early reflection only (≤5% wet) — no convolver wash',
   },
   {
     key: 'width',
     label: 'Stereo width',
-    hint: 'Mid-side widen + tiny Haas (≤2ms) — mono-safer',
+    hint: 'Proper mid-side widen — mono-safe, no Haas',
   },
 ]
 
@@ -83,6 +83,15 @@ export function HumanizeControls({
         {active === 'custom' && (
           <span className="text-xs self-center text-orange-300/80 font-medium">Custom</span>
         )}
+        <button
+          type="button"
+          disabled={disabled}
+          title="Set mix to 0% — true bypass equals original"
+          className="btn btn-ghost text-xs !px-3 !py-1.5 ml-auto"
+          onClick={() => onChange({ ...params, mix: 0 })}
+        >
+          Bypass (0% mix)
+        </button>
       </div>
 
       {meta && (
@@ -98,7 +107,9 @@ export function HumanizeControls({
             className={`block rounded-lg border px-3 py-2 ${
               s.key === 'mix'
                 ? 'border-orange-500/30 bg-orange-500/5 sm:col-span-2'
-                : 'border-violet-500/10 bg-black/20'
+                : s.key === 'noise'
+                  ? 'border-violet-500/10 bg-black/20 opacity-60'
+                  : 'border-violet-500/10 bg-black/20'
             }`}
           >
             <div className="flex items-center justify-between mb-1.5">
@@ -113,7 +124,7 @@ export function HumanizeControls({
               min={0}
               max={1}
               step={0.01}
-              disabled={disabled}
+              disabled={disabled || s.key === 'noise'}
               value={params[s.key]}
               onChange={(e) => onChange({ ...params, [s.key]: Number(e.target.value) })}
               aria-label={s.label}

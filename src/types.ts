@@ -7,15 +7,15 @@ export interface HumanizeParams {
   flutter: number
   /** Dynamics ride / soft compression breathe 0–1 */
   dynamics: number
-  /** Very quiet high-passed air / room hiss 0–1 */
+  /** Unused in engine (UI compat) — air/noise removed to keep chain clean */
   noise: number
   /** Soft saturation / warmth 0–1 */
   warmth: number
-  /** Short room bloom 0–1 — kept dry by design */
+  /** Tiny early reflection 0–1 — ≤5% wet, no convolver */
   space: number
   /** Transient softening 0–1 */
   transientSoft: number
-  /** Stereo mid-side width 0–1 — mono-safe */
+  /** Stereo mid-side width 0–1 — mono-safe, no Haas */
   width: number
   /** Dry/wet mix master 0–1 — dial intensity without changing character */
   mix: number
