@@ -1,10 +1,10 @@
 # Spectral Humanizer
 
-**Strip the machine voice. Keep the meaning.**
+**AI music detector & humanizer — local, spectral, honest.**
 
-A dark, spectral / gothic-modern text humanizer in the Spektor / THE ALKHEMYST aesthetic. Rewrites stiff or AI-sounding writing into natural human prose — **locally in your browser**, with an optional OpenAI-compatible LLM boost.
+Dark Spektor / THE ALKHEMYST toolkit for artists polishing AI-assisted demos (Suno, Udio, and friends). Upload a track, see a **heuristic AI-likelihood score**, then **humanize** groove, dynamics, transients, warmth, noise air, stereo width, and space — entirely in the browser.
 
-> **Honest note:** Quality varies. Always edit the output. This tool is framed as making writing more natural / less robotic — not as a detector-beating or cheating utility.
+> **Honest note:** Detection is educational / heuristic, **not** forensic. Humanize does **not** claim “undetectable” audio or guarantee beating commercial detectors. Always trust your ears and disclose AI assistance when required.
 
 - **Live:** [https://marcanex.github.io/spectral-humanizer/](https://marcanex.github.io/spectral-humanizer/)
 - **Source:** [github.com/marcanex/spectral-humanizer](https://github.com/marcanex/spectral-humanizer)
@@ -12,10 +12,9 @@ A dark, spectral / gothic-modern text humanizer in the Spektor / THE ALKHEMYST a
 ## Stack
 
 - Vite + React 19 + TypeScript
-- Tailwind CSS v4 (`@tailwindcss/vite`)
-- Client-only (no backend)
-- localStorage for settings, history, library
-- Optional `fetch` to your OpenAI-compatible endpoint (key stays in localStorage)
+- Tailwind CSS v4
+- Web Audio API / `OfflineAudioContext` (client-only)
+- localStorage for settings + session metadata
 
 ## Quick start
 
@@ -25,50 +24,33 @@ npm run dev
 ```
 
 ```bash
-npm run build    # → dist/
-npm run preview
-npm run deploy   # build + gh-pages
+npm run build
+npm run deploy   # build + gh-pages (base: /spectral-humanizer/)
 ```
 
 ## Features
 
-1. **Dual editor** — input / output side-by-side (stacks on mobile), optional sync scroll
-2. **Local humanize engine** — multi-pass pipeline (AI-tell replacement, rhythm variation, contractions, hedges, synonyms, paragraph reshape, voice presets)
-3. **Strength** — Subtle / Balanced / Aggressive
-4. **Voices** — Casual, Professional, Academic, Creative/Literary, Street/Confessional (Spektor-flavored)
-5. **Preserve** — quotes, markdown, URLs, code fences
-6. **Variants** — 1–3 alternatives to pick from
-7. **AI-tell scanner** — lists common robotic phrases with counts
-8. **Diff view** — word-level before/after
-9. **Stats** — words, chars, sentences, avg length, Flesch-ish readability, robotic score
-10. **History** — restore / delete / search (localStorage)
-11. **Library** — save & pin favorite snippets
-12. **Batch mode** — `---` separators or .txt/.md upload; zip or combined download
-13. **Import / export** — file drop, copy, .txt/.md download
-14. **Keyboard shortcuts** — cheat sheet in-app (⌘/Ctrl+Enter to humanize, etc.)
-15. **Settings** — accent themes, defaults, auto-humanize on paste, privacy note
-16. **Optional LLM boost** — OpenAI-compatible key + base URL; graceful local fallback
-17. **Onboarding** — first-run tour + sample AI fluff
-18. **Polish** — responsive, a11y focus, reduced-motion, favicon, OG/meta, toasts
+1. **Drag-drop / file picker** — mp3, wav, m4a, ogg (batch queue)
+2. **Waveform + frequency bars** — canvas visualizers with playhead seek
+3. **AI-music likelihood gauge** — weighted heuristics with feature breakdown
+4. **Humanize engine** — micro-timing jitter, pitch drift, dynamics breathe, transient softening, saturation, pink-noise bed, stereo width, convolver space
+5. **Presets** — Subtle / Natural / Lived-in / Spektor Stage (+ custom sliders)
+6. **A/B compare** — original vs humanized playback
+7. **Export WAV** — 16-bit PCM or 32-bit float
+8. **History** — session metadata in localStorage
+9. **Keyboard shortcuts**, settings, honesty / limits modal
 
-## How the local engine works
+## Detection heuristics (educational)
 
-Text is split around protected regions (quotes, markdown links, URLs, code fences). Remaining prose runs through ordered passes: strip/replace common AI-tell phrases, context-light synonym swaps, contraction injection scaled by voice, hedge add/remove, sentence merge/split for rhythm, light paragraph reshape, then voice-specific polish. A seeded PRNG (from input + salt) produces stable-but-varied outputs so you can generate 2–3 alternatives without calling a server.
+Windowed analysis of amplitude envelope stability, macro dynamics / crest, silence-gap patterning, spectral flatness quirks, pitch-period lock, transient sparsity/uniformity, and zero-crossing regularity. Combined into a 0–100 score with an explicit caveat.
+
+## Humanize effects
+
+Sample-domain groove resample (grain jitter + slow pitch wander), envelope-aware transient softening, dynamics breathing, soft-clip warmth, then an `OfflineAudioContext` graph for pink-noise air, Haas/M-S width, and impulse reverb — with gentle peak limiting.
 
 ## Privacy
 
-- Default path never leaves your device.
-- Optional LLM calls go only to the base URL you set; the API key is stored in `localStorage` only.
-
-## Deploy (GitHub Pages)
-
-Configured with `base: '/spectral-humanizer/'`. Publish the `dist/` folder to the `gh-pages` branch:
-
-```bash
-npm run deploy
-```
-
-Then enable Pages: **Settings → Pages → Deploy from branch → `gh-pages` / root**.
+Audio never leaves your device. No backend.
 
 ## License
 

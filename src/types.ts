@@ -1,112 +1,80 @@
-export type Strength = 'subtle' | 'balanced' | 'aggressive'
-export type Voice =
-  | 'casual'
-  | 'professional'
-  | 'academic'
-  | 'creative'
-  | 'street'
+export type PresetId = 'subtle' | 'natural' | 'lived-in' | 'spektor-stage' | 'custom'
 
-export interface PreserveOptions {
-  quotes: boolean
-  markdown: boolean
-  urls: boolean
-  codeFences: boolean
+export interface HumanizeParams {
+  /** Micro-timing jitter 0–1 */
+  jitter: number
+  /** Subtle pitch drift / vibrato 0–1 */
+  pitchDrift: number
+  /** Dynamics variation / breathing gain 0–1 */
+  dynamics: number
+  /** Breath / room noise bed 0–1 */
+  noise: number
+  /** Soft saturation / warmth 0–1 */
+  warmth: number
+  /** Reverb / stereo space 0–1 */
+  space: number
+  /** Transient softening 0–1 */
+  transientSoft: number
+  /** Stereo width 0–1 */
+  width: number
 }
 
-export interface HumanizeOptions {
-  strength: Strength
-  voice: Voice
-  preserve: PreserveOptions
-  hedges: 'less' | 'same' | 'more'
-  variantCount: number
-}
-
-export interface AiTellMatch {
-  phrase: string
-  count: number
-  category: string
-  indices: number[]
-}
-
-export interface TextStats {
-  words: number
-  chars: number
-  sentences: number
-  avgSentenceLength: number
-  flesch: number
-  roboticScore: number
-}
-
-export interface HistoryEntry {
+export interface DetectionFeature {
   id: string
-  createdAt: number
-  input: string
-  output: string
-  voice: Voice
-  strength: Strength
-  label?: string
+  label: string
+  score: number
+  weight: number
+  detail: string
 }
 
-export interface LibraryItem {
+export interface DetectionResult {
+  /** 0–100 heuristic AI-likelihood */
+  score: number
+  label: 'Likely natural' | 'Mixed signals' | 'Likely synthetic' | 'Strongly synthetic'
+  features: DetectionFeature[]
+  durationSec: number
+  sampleRate: number
+  channels: number
+  caveat: string
+}
+
+export interface AudioSession {
   id: string
+  name: string
   createdAt: number
-  text: string
-  title: string
-  pinned?: boolean
-  tags?: string[]
+  durationSec: number
+  sampleRate: number
+  channels: number
+  detectionScore: number | null
+  preset: PresetId
+  params: HumanizeParams
+  /** original file size bytes */
+  sizeBytes: number
+  mimeType: string
+}
+
+export interface QueueItem {
+  id: string
+  file: File
+  status: 'pending' | 'analyzing' | 'ready' | 'processing' | 'done' | 'error'
+  error?: string
+  detection?: DetectionResult
+  originalBuffer?: AudioBuffer
+  humanizedBuffer?: AudioBuffer
 }
 
 export interface AppSettings {
-  accent: 'purple' | 'magenta' | 'ember' | 'cyan'
-  defaultStrength: Strength
-  defaultVoice: Voice
-  autoHumanizeOnPaste: boolean
-  syncScroll: boolean
-  llmEnabled: boolean
-  llmApiKey: string
-  llmBaseUrl: string
-  llmModel: string
-  onboardingDone: boolean
-  hedgeDefault: 'less' | 'same' | 'more'
+  autoAnalyze: boolean
+  defaultPreset: PresetId
+  showSpectrogram: boolean
+  showFreqBars: boolean
+  reducedMotion: boolean
+  exportBitDepth: 16 | 32
+  accent: 'ember' | 'violet' | 'cyan'
 }
 
-export interface ToastMessage {
+export interface Toast {
   id: string
-  type: 'success' | 'error' | 'info'
-  text: string
-}
-
-export const DEFAULT_PRESERVE: PreserveOptions = {
-  quotes: true,
-  markdown: true,
-  urls: true,
-  codeFences: true,
-}
-
-export const DEFAULT_SETTINGS: AppSettings = {
-  accent: 'purple',
-  defaultStrength: 'balanced',
-  defaultVoice: 'casual',
-  autoHumanizeOnPaste: false,
-  syncScroll: true,
-  llmEnabled: false,
-  llmApiKey: '',
-  llmBaseUrl: 'https://api.openai.com/v1',
-  llmModel: 'gpt-4o-mini',
-  onboardingDone: false,
-  hedgeDefault: 'same',
-}
-
-export const VOICE_LABELS: Record<Voice, string> = {
-  casual: 'Casual',
-  professional: 'Professional',
-  academic: 'Academic',
-  creative: 'Creative / Literary',
-  street: 'Street / Confessional',
-}
-
-export const STRENGTH_LABELS: Record<Strength, string> = {
-  subtle: 'Subtle',
-  balanced: 'Balanced',
-  aggressive: 'Aggressive',
+  message: string
+  tone: 'info' | 'success' | 'warn' | 'error'
 }

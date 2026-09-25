@@ -1,15 +1,16 @@
 import { useCallback, useState } from 'react'
-import type { ToastMessage } from '../types'
+import type { Toast } from '../types'
+import { uid } from '../lib/audioUtils'
 
 export function useToasts() {
-  const [toasts, setToasts] = useState<ToastMessage[]>([])
+  const [toasts, setToasts] = useState<Toast[]>([])
 
-  const push = useCallback((text: string, type: ToastMessage['type'] = 'info') => {
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-    setToasts((t) => [...t, { id, text, type }])
+  const push = useCallback((message: string, tone: Toast['tone'] = 'info') => {
+    const id = uid('toast')
+    setToasts((t) => [...t, { id, message, tone }])
     window.setTimeout(() => {
       setToasts((t) => t.filter((x) => x.id !== id))
-    }, 3200)
+    }, 4200)
   }, [])
 
   const dismiss = useCallback((id: string) => {

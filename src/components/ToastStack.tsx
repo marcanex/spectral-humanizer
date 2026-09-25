@@ -1,37 +1,27 @@
-import type { ToastMessage } from '../types'
+import type { Toast } from '../types'
 
 export function ToastStack({
   toasts,
   onDismiss,
 }: {
-  toasts: ToastMessage[]
+  toasts: Toast[]
   onDismiss: (id: string) => void
 }) {
   return (
-    <div
-      className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 max-w-sm"
-      aria-live="polite"
-    >
+    <div className="toast-stack" aria-live="polite">
       {toasts.map((t) => (
-        <div
-          key={t.id}
-          className={`toast-enter panel px-4 py-3 text-sm flex items-start gap-3 ${
-            t.type === 'error'
-              ? 'border-orange-500/40'
-              : t.type === 'success'
-                ? 'border-cyan-400/30'
-                : ''
-          }`}
-        >
-          <span className="flex-1 text-fog">{t.text}</span>
-          <button
-            type="button"
-            className="text-muted hover:text-white text-xs"
-            onClick={() => onDismiss(t.id)}
-            aria-label="Dismiss"
-          >
-            ✕
-          </button>
+        <div key={t.id} className={`toast ${t.tone}`} role="status">
+          <div className="flex items-start justify-between gap-3">
+            <span>{t.message}</span>
+            <button
+              type="button"
+              className="text-violet-300/70 hover:text-white text-sm"
+              onClick={() => onDismiss(t.id)}
+              aria-label="Dismiss"
+            >
+              ×
+            </button>
+          </div>
         </div>
       ))}
     </div>

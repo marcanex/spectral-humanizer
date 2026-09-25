@@ -1,13 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-  <defs>
-    <radialGradient id="g" cx="50%" cy="40%" r="60%">
-      <stop offset="0%" stop-color="#1a0a2e"/>
-      <stop offset="100%" stop-color="#050308"/>
-    </radialGradient>
-  </defs>
-  <rect width="1200" height="630" fill="url(#g)"/>
-  <text x="600" y="280" text-anchor="middle" fill="#e8e0f0" font-family="Georgia, serif" font-size="72" font-weight="bold">Spectral Humanizer</text>
-  <text x="600" y="360" text-anchor="middle" fill="#c4b5fd" font-family="system-ui" font-size="28">Strip the machine voice. Keep the meaning.</text>
-  <circle cx="600" cy="180" r="40" fill="none" stroke="#a855f7" stroke-width="2"/>
-  <circle cx="600" cy="180" r="8" fill="#fbbf24"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" fill="none">
+  <rect width="1200" height="630" fill="#050308"/>
+  <circle cx="200" cy="100" r="280" fill="#a855f7" opacity=".18"/>
+  <circle cx="1000" cy="500" r="320" fill="#f97316" opacity=".12"/>
+  <text x="80" y="250" font-family="Georgia, serif" font-size="72" fill="#f3eef8">Spectral Humanizer</text>
+  <text x="80" y="330" font-family="system-ui, sans-serif" font-size="36" fill="#c4b5fd">AI music detector &amp; humanizer</text>
+  <text x="80" y="400" font-family="system-ui, sans-serif" font-size="24" fill="#fb923c">Groove · dynamics · warmth · space — local &amp; honest</text>
+  <text x="80" y="540" font-family="system-ui, sans-serif" font-size="20" fill="#a89bb8">THE ALKHEMYST / Spektor toolkit</text>
 </svg>

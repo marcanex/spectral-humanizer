@@ -1,9 +1,18 @@
-import type { AppSettings, HistoryEntry, LibraryItem } from '../types'
-import { DEFAULT_SETTINGS } from '../types'
+import type { AppSettings, AudioSession, HumanizeParams, PresetId } from '../types'
+import { PRESET_PARAMS } from './presets'
 
-const SETTINGS_KEY = 'spectral-humanizer:settings'
-const HISTORY_KEY = 'spectral-humanizer:history'
-const LIBRARY_KEY = 'spectral-humanizer:library'
+const SETTINGS_KEY = 'spectral-humanizer:settings:v2'
+const HISTORY_KEY = 'spectral-humanizer:history:v2'
+
+export const DEFAULT_SETTINGS: AppSettings = {
+  autoAnalyze: true,
+  defaultPreset: 'natural',
+  showSpectrogram: false,
+  showFreqBars: true,
+  reducedMotion: false,
+  exportBitDepth: 16,
+  accent: 'ember',
+}
 
 export function loadSettings(): AppSettings {
   try {
@@ -19,33 +28,50 @@ export function saveSettings(s: AppSettings): void {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(s))
 }
 
-export function loadHistory(): HistoryEntry[] {
+export function loadHistory(): AudioSession[] {
   try {
     const raw = localStorage.getItem(HISTORY_KEY)
-    return raw ? (JSON.parse(raw) as HistoryEntry[]) : []
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as AudioSession[]
+    return Array.isArray(parsed) ? parsed : []
   } catch {
     return []
   }
 }
 
-export function saveHistory(entries: HistoryEntry[]): void {
-  // Cap at 80
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(entries.slice(0, 80)))
+export function saveHistory(sessions: AudioSession[]): void {
+  // Keep last 40 metadata-only entries
+  const trimmed = sessions.slice(0, 40)
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(trimmed))
 }
 
-export function loadLibrary(): LibraryItem[] {
-  try {
-    const raw = localStorage.getItem(LIBRARY_KEY)
-    return raw ? (JSON.parse(raw) as LibraryItem[]) : []
-  } catch {
-    return []
+export function pushHistory(session: AudioSession): AudioSession[] {
+  const prev = loadHistory().filter((s) => s.id !== session.id)
+  const next = [session, ...prev]
+  saveHistory(next)
+  return next
+}
+
+export function defaultParams(preset: PresetId = 'natural'): HumanizeParams {
+  if (preset === 'custom') return { ...PRESET_PARAMS.natural }
+  return { ...PRESET_PARAMS[preset] }
+}
+
+/** Clear legacy text-humanizer keys if present */
+export function purgeLegacyKeys(): void {
+  const legacy = [
+    'spectral-humanizer-settings',
+    'spectral-humanizer-history',
+    'spectral-humanizer-library',
+    'spectral-humanizer:settings',
+    'spectral-humanizer:history',
+    'spectral-humanizer:library',
+  ]
+  for (const k of legacy) {
+    try {
+      localStorage.removeItem(k)
+    } catch {
+      /* ignore */
+    }
   }
-}
-
-export function saveLibrary(items: LibraryItem[]): void {
-  localStorage.setItem(LIBRARY_KEY, JSON.stringify(items.slice(0, 100)))
-}
-
-export function uid(): string {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`
 }
